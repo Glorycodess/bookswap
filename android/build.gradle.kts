@@ -7,7 +7,7 @@ buildscript {
     }
     dependencies {
         // Gradle plugin for Android
-        classpath("com.android.tools.build:gradle:8.1.0")
+        classpath("com.android.tools.build:gradle:8.7.0")
         // Kotlin plugin
         classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:1.8.21")
         // Google Services plugin - ADD THIS LINE

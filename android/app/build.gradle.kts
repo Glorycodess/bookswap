@@ -10,7 +10,7 @@ plugins {
 
 android {
     namespace = "com.example.bookswap_app"
-    compileSdk = 34
+    compileSdk = 36
     ndkVersion = "27.0.12077973"  // CHANGED FROM 25.1.8937393
 
     compileOptions {
