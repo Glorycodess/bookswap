@@ -156,38 +156,43 @@ class _ChatScreenState extends State<ChatScreen> {
                 final docs = snapshot.data?.docs ?? [];
 
                 if (docs.isEmpty) {
-                  return Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(20),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(
-                            Icons.chat_bubble_outline,
-                            size: 64,
-                            color: Colors.grey[400],
-                          ),
-                          const SizedBox(height: 16),
-                          Text(
-                            'No messages yet',
-                            style: GoogleFonts.poppins(
-                              fontSize: 18,
-                              fontWeight: FontWeight.w600,
-                              color: Colors.grey[600],
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            'Start the conversation about this book swap!',
-                            style: GoogleFonts.poppins(
-                              fontSize: 14,
-                              color: Colors.grey[500],
-                            ),
-                            textAlign: TextAlign.center,
-                          ),
-                        ],
-                      ),
-                    ),
+                  // Show demo conversation when no messages exist
+                  return ListView.builder(
+                    controller: _scrollController,
+                    padding: const EdgeInsets.all(16),
+                    itemCount: 4,
+                    itemBuilder: (context, index) {
+                      final demoMessages = [
+                        {
+                          'text': 'Hey! I just finished reading Game of Thrones. It was really nice!',
+                          'isMe': false,
+                          'time': DateTime.now().subtract(const Duration(minutes: 10)),
+                        },
+                        {
+                          'text': 'Oh yeah, I loved that one too! Would you like to swap books?',
+                          'isMe': true,
+                          'time': DateTime.now().subtract(const Duration(minutes: 9)),
+                        },
+                        {
+                          'text': 'Sure! What do you have available?',
+                          'isMe': false,
+                          'time': DateTime.now().subtract(const Duration(minutes: 8)),
+                        },
+                        {
+                          'text': 'I have The Hobbit and 1984. Interested?',
+                          'isMe': true,
+                          'time': DateTime.now().subtract(const Duration(minutes: 7)),
+                        },
+                      ];
+                      
+                      final message = demoMessages[index];
+                      return _MessageBubble(
+                        text: message['text'] as String,
+                        isMe: message['isMe'] as bool,
+                        timestamp: Timestamp.fromDate(message['time'] as DateTime),
+                        purple: _purple,
+                      );
+                    },
                   );
                 }
 

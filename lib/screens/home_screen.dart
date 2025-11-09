@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import '../tabs/browse_tab.dart';
+import '../tabs/listings_tab.dart';
 import '../tabs/chats_tab.dart';
 import '../tabs/settings_tab.dart';
 
@@ -21,7 +21,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     super.initState();
     _pages = [
       const BrowseTab(key: ValueKey('Browse')),
-      _PlaceholderTab(title: 'Listings', key: const ValueKey('Listings')),
+      const ListingsTab(key: ValueKey('Listings')),
       const ChatsTab(key: ValueKey('Chat')),
       const SettingsTab(key: ValueKey('Settings')),
     ];
@@ -149,25 +149,3 @@ class _BottomNavBar extends StatelessWidget {
   }
 }
 
-// Placeholder tab for Listings
-class _PlaceholderTab extends StatelessWidget {
-  final String title;
-  const _PlaceholderTab({required this.title, Key? key}) : super(key: key);
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      color: Colors.white,
-      child: Center(
-        child: Text(
-          title,
-          style: GoogleFonts.poppins(
-            fontSize: 28,
-            fontWeight: FontWeight.w700,
-            color: const Color(0xFF111827),
-          ),
-        ),
-      ),
-    );
-  }
-}

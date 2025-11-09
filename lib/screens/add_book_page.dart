@@ -56,26 +56,44 @@ class _AddBookPageState extends State<AddBookPage> {
   void _submit() async {
     if (!_formKey.currentState!.validate()) return;
 
+    // Validate required fields
+    final title = _titleController.text.trim();
+    final author = _authorController.text.trim();
+    
+    if (title.isEmpty || author.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Please fill in title and author'),
+          backgroundColor: Colors.orange.shade600,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
     setState(() => _isSubmitting = true);
 
-    String? imageUrl = _selectedImage?.path;
+    String? imageUrl;
 
-    if (imageUrl == null || imageUrl.isEmpty) {
-      imageUrl = await _fetchCoverUrl(
-        _titleController.text.trim(),
-        _authorController.text.trim(),
-      );
+    // First try to get image from selection
+    if (_selectedImage != null) {
+      imageUrl = _selectedImage!.path;
+    } else {
+      // If no image selected, try to fetch from OpenLibrary
+      imageUrl = await _fetchCoverUrl(title, author);
     }
 
     bool success = await context.read<BookProvider>().createBook(
-          title: _titleController.text.trim(),
-          author: _authorController.text.trim(),
+          title: title,
+          author: author,
           genre: '',
           condition: _condition,
           description: _lookingForController.text.trim(),
           ownerName: 'Anonymous',
           imagePath: imageUrl,
         );
+
+    if (!mounted) return;
 
     setState(() => _isSubmitting = false);
 
@@ -94,12 +112,21 @@ class _AddBookPageState extends State<AddBookPage> {
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         ),
       );
+      
+      // Clear form
       _titleController.clear();
       _authorController.clear();
       _lookingForController.clear();
       setState(() {
         _condition = 'New';
         _selectedImage = null;
+      });
+      
+      // Navigate back after a short delay
+      Future.delayed(const Duration(milliseconds: 500), () {
+        if (mounted) {
+          Navigator.pop(context, true);
+        }
       });
     } else {
       final error = context.read<BookProvider>().errorMessage ?? 'Unknown error';
@@ -109,6 +136,7 @@ class _AddBookPageState extends State<AddBookPage> {
           backgroundColor: Colors.red.shade600,
           behavior: SnackBarBehavior.floating,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          duration: const Duration(seconds: 4),
         ),
       );
     }

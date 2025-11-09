@@ -98,18 +98,42 @@ class BookProvider extends ChangeNotifier {
     String? imagePath,
   }) async {
     try {
+      // Check if user is authenticated
+      final userId = _firestoreService.currentUserId;
+      if (userId == null || userId.isEmpty) {
+        _errorMessage = 'Please log in to add a book';
+        _isLoading = false;
+        notifyListeners();
+        return false;
+      }
+
       _isLoading = true;
       _errorMessage = null;
       notifyListeners();
 
       String imageUrl = '';
+      
+      // Handle image upload - check if it's a local file path or URL
       if (imagePath != null && imagePath.isNotEmpty) {
-        imageUrl = await _storageService.uploadBookImage(imagePath);
+        // Check if it's a URL (starts with http) or a local file path
+        if (imagePath.startsWith('http://') || imagePath.startsWith('https://')) {
+          // It's already a URL from OpenLibrary
+          imageUrl = imagePath;
+        } else {
+          // It's a local file path - upload to Firebase Storage
+          try {
+            imageUrl = await _storageService.uploadBookImage(imagePath);
+          } catch (e) {
+            print('Image upload error: $e');
+            // Continue without image if upload fails
+            imageUrl = '';
+          }
+        }
       }
 
       final book = BookModel(
         id: '',
-        ownerId: _firestoreService.currentUserId ?? '',
+        ownerId: userId,
         ownerName: ownerName,
         title: title,
         author: author,
@@ -125,9 +149,11 @@ class BookProvider extends ChangeNotifier {
       await _firestoreService.createBook(book);
 
       _isLoading = false;
+      _errorMessage = null;
       notifyListeners();
       return true;
     } catch (e) {
+      print('Create book error: $e');
       _isLoading = false;
       _errorMessage = e.toString();
       notifyListeners();
