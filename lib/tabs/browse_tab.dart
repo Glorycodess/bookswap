@@ -1,8 +1,9 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
-import '../screens/chats/chat_screen.dart';
+import '../providers/book_provider.dart';
+import '../screens/add_book_page.dart';
+import '../screens/book_details_page.dart';
 
 class BrowseTab extends StatefulWidget {
   const BrowseTab({super.key});
@@ -11,19 +12,15 @@ class BrowseTab extends StatefulWidget {
   State<BrowseTab> createState() => _BrowseTabState();
 }
 
-class _BrowseTabState extends State<BrowseTab> with SingleTickerProviderStateMixin {
+class _BrowseTabState extends State<BrowseTab> {
   final TextEditingController _searchController = TextEditingController();
-  final GlobalKey<RefreshIndicatorState> _refreshIndicatorKey = GlobalKey<RefreshIndicatorState>();
   String _searchQuery = '';
 
   @override
   void initState() {
     super.initState();
-    _searchController.addListener(() {
-      setState(() {
-        _searchQuery = _searchController.text.toLowerCase();
-      });
-    });
+    final bookProvider = context.read<BookProvider>();
+    bookProvider.getBrowseListings();
   }
 
   @override
@@ -32,52 +29,119 @@ class _BrowseTabState extends State<BrowseTab> with SingleTickerProviderStateMix
     super.dispose();
   }
 
-  void _clearSearch() {
-    _searchController.clear();
+  int _calculateCrossAxisCount(double screenWidth) {
+    if (screenWidth >= 1200) return 4;
+    if (screenWidth >= 900) return 3;
+    if (screenWidth >= 600) return 2;
+    return 2;
   }
 
-  Future<void> _handleRefresh() async {
-    await Future.delayed(const Duration(milliseconds: 500));
+  void _showBookOptions(BuildContext context, book) {
+    final primaryColor = Color(0xFF6C5CE7);
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        padding: EdgeInsets.symmetric(vertical: 20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.grey.shade300,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            SizedBox(height: 20),
+            ListTile(
+              leading: Icon(Icons.edit_outlined, color: primaryColor),
+              title: Text('Edit Book', style: GoogleFonts.poppins(fontWeight: FontWeight.w500)),
+              onTap: () {
+                Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('Edit feature coming soon'),
+                    behavior: SnackBarBehavior.floating,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                );
+              },
+            ),
+            ListTile(
+              leading: Icon(Icons.delete_outline, color: Colors.red.shade600),
+              title: Text('Delete Book',
+                  style: GoogleFonts.poppins(
+                    fontWeight: FontWeight.w500,
+                    color: Colors.red.shade600,
+                  )),
+              onTap: () {
+                Navigator.pop(context);
+                _confirmDelete(context, book.id, book.imageUrl);
+              },
+            ),
+            SizedBox(height: 10),
+          ],
+        ),
+      ),
+    );
   }
 
-  Future<void> _navigateToChat(BuildContext context, String bookId, String bookTitle, String ownerId) async {
-    final currentUserId = FirebaseAuth.instance.currentUser?.uid;
-    if (currentUserId == null) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Please log in to start a swap')),
-        );
-      }
-      return;
-    }
-
-    final swapId = '${bookId}_${currentUserId}_${ownerId}';
-
-    try {
-      final swapDoc = await FirebaseFirestore.instance.collection('swaps').doc(swapId).get();
-      if (!swapDoc.exists) {
-        await FirebaseFirestore.instance.collection('swaps').doc(swapId).set({
-          'bookId': bookId,
-          'bookTitle': bookTitle,
-          'requesterId': currentUserId,
-          'ownerId': ownerId,
-          'createdAt': FieldValue.serverTimestamp(),
-          'status': 'pending',
-        });
-      }
-    } catch (e) {
-      debugPrint('Error creating swap: $e');
-    }
-
-    if (mounted) {
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (context) => ChatScreen(
-            swapId: swapId,
-            bookTitle: bookTitle,
-            bookId: bookId,
+  Future<void> _confirmDelete(BuildContext context, String bookId, String? imageUrl) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: [
+            Icon(Icons.warning_rounded, color: Colors.orange.shade600, size: 28),
+            SizedBox(width: 12),
+            Text('Delete Book', style: GoogleFonts.poppins(fontWeight: FontWeight.w700)),
+          ],
+        ),
+        content: Text(
+          'Are you sure you want to delete this book? This action cannot be undone.',
+          style: GoogleFonts.poppins(),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text('Cancel', style: GoogleFonts.poppins(color: Colors.grey.shade600)),
           ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red.shade600,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              elevation: 0,
+            ),
+            child: Text('Delete', style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      final success = await context.read<BookProvider>().deleteBook(bookId, imageUrl);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              Icon(success ? Icons.check_circle : Icons.error_outline, color: Colors.white),
+              SizedBox(width: 12),
+              Text(success ? 'Book deleted successfully' : 'Failed to delete book'),
+            ],
+          ),
+          backgroundColor: success ? Colors.green.shade600 : Colors.red.shade600,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         ),
       );
     }
@@ -85,674 +149,281 @@ class _BrowseTabState extends State<BrowseTab> with SingleTickerProviderStateMix
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      color: Colors.white,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Bold "Browse Books" header
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 24, 20, 16),
-            child: Text(
-              'Browse Books',
-              style: GoogleFonts.poppins(
-                fontSize: 36,
-                fontWeight: FontWeight.w800,
-                color: const Color(0xFF8E2DE2),
-                letterSpacing: -0.5,
+    final primaryColor = Color(0xFF6C5CE7);
+    final accentColor = Color(0xFF00B894);
+    final bookProvider = context.watch<BookProvider>();
+    final books = bookProvider.browseBooks;
+
+    final filteredBooks = _searchQuery.isEmpty
+        ? books
+        : books
+            .where((book) =>
+                book.title.toLowerCase().contains(_searchQuery) ||
+                book.author.toLowerCase().contains(_searchQuery))
+            .toList();
+
+    final screenWidth = MediaQuery.of(context).size.width;
+    final crossAxisCount = _calculateCrossAxisCount(screenWidth);
+
+    // REMOVED: "BookSwap", subtitle, and logo — cleaner header
+    // KEPT: "Browse Books", count, and search
+    // FIXED: Clean minimal header with gradient, rounded corners, SafeArea, full bleed
+    return Stack(
+      children: [
+        // Main content column
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // FIXED: Clean minimal header with gradient background
+            // Full bleed gradient with rounded bottom corners, no white line/gap
+            Container(
+              width: double.infinity,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [Color(0xFF8E2DE2), Color(0xFF4A00E0)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                borderRadius: BorderRadius.only(
+                  bottomLeft: Radius.circular(24),
+                  bottomRight: Radius.circular(24),
+                ),
+              ),
+              child: SafeArea(
+                bottom: false,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // "Browse Books" title — large, bold, no icon
+                      Text(
+                        'Browse Books',
+                        style: GoogleFonts.poppins(
+                          fontSize: 28,
+                          fontWeight: FontWeight.w800,
+                          color: Colors.white,
+                        ),
+                      ),
+                      SizedBox(height: 8),
+                      // Book count — smaller text below title
+                      Text(
+                        '${filteredBooks.length} books available',
+                        style: GoogleFonts.poppins(
+                          fontSize: 14,
+                          color: Colors.white.withOpacity(0.9),
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      SizedBox(height: 20),
+                      // Clean search bar — full-width, rounded, with shadow
+                      Container(
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(16),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.1),
+                              blurRadius: 20,
+                              offset: Offset(0, 4),
+                            ),
+                          ],
+                        ),
+                        child: TextField(
+                          controller: _searchController,
+                          onChanged: (value) =>
+                              setState(() => _searchQuery = value.toLowerCase()),
+                          style: GoogleFonts.poppins(),
+                          decoration: InputDecoration(
+                            hintText: 'Search by title or author...',
+                            hintStyle: GoogleFonts.poppins(color: Colors.grey.shade400),
+                            prefixIcon: Icon(Icons.search_rounded, color: primaryColor, size: 24),
+                            suffixIcon: _searchQuery.isNotEmpty
+                                ? IconButton(
+                                    icon: Icon(Icons.clear_rounded, color: Colors.grey.shade400),
+                                    onPressed: () {
+                                      _searchController.clear();
+                                      setState(() => _searchQuery = '');
+                                    },
+                                  )
+                                : null,
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(16),
+                              borderSide: BorderSide.none,
+                            ),
+                            filled: true,
+                            fillColor: Colors.white,
+                            contentPadding: EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               ),
             ),
+            // Books Grid
+            Expanded(
+              child: Container(
+                color: Colors.grey.shade50,
+                child: bookProvider.isLoading
+                    ? Center(
+                        child: CircularProgressIndicator(color: primaryColor, strokeWidth: 3),
+                      )
+                    : filteredBooks.isEmpty
+                        ? Center(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(Icons.menu_book_rounded, size: 80, color: Colors.grey.shade300),
+                                SizedBox(height: 16),
+                                Text(
+                                  _searchQuery.isEmpty ? 'No books yet' : 'No books found',
+                                  style: GoogleFonts.poppins(fontSize: 20, fontWeight: FontWeight.w600, color: Colors.grey.shade600),
+                                ),
+                              ],
+                            ),
+                          )
+                        : GridView.builder(
+                            padding: const EdgeInsets.fromLTRB(20, 20, 20, 100),
+                            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                              crossAxisCount: crossAxisCount,
+                              mainAxisSpacing: 20,
+                              crossAxisSpacing: 20,
+                              // FIXED: Changed childAspectRatio from 0.58 to 0.72 to prevent overflow
+                              childAspectRatio: 0.72,
+                            ),
+                            itemCount: filteredBooks.length,
+                            itemBuilder: (context, index) {
+                              final book = filteredBooks[index];
+                              return _buildBookCard(book, primaryColor, accentColor);
+                            },
+                          ),
+              ),
+            ),
+          ],
+        ),
+        // FAB positioned manually (no Scaffold needed)
+        Positioned(
+          right: 16,
+          bottom: 80,
+          child: FloatingActionButton.extended(
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const AddBookPage()),
+            ),
+            backgroundColor: accentColor,
+            foregroundColor: Colors.white,
+            elevation: 6,
+            icon: Icon(Icons.add_rounded, size: 24),
+            label: Text(
+              'Add Book',
+              style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 15),
+            ),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           ),
-          // Search bar with clear button
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-            child: Container(
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(18),
-                boxShadow: [
-                  BoxShadow(
-                    color: const Color(0xFF8E2DE2).withOpacity(0.15),
-                    blurRadius: 12,
-                    offset: const Offset(0, 4),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildBookCard(book, Color primaryColor, Color accentColor) {
+    return GestureDetector(
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => BookDetailsPage(book: book)),
+        );
+      },
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          // FIXED: Subtle shadow for modern card design
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.06),
+              blurRadius: 12,
+              offset: Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // FIXED: Book Cover with fixed aspect ratio and proper fit
+            Expanded(
+              flex: 5,
+              child: ClipRRect(
+                borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+                child: book.imageUrl != null && book.imageUrl.isNotEmpty
+                    ? Image.network(
+                        book.imageUrl,
+                        // FIXED: BoxFit.cover to prevent image overflow and ensure consistent sizing
+                        fit: BoxFit.cover,
+                        width: double.infinity,
+                        errorBuilder: (context, error, stackTrace) => _buildPlaceholderImage(),
+                        loadingBuilder: (context, child, loadingProgress) {
+                          if (loadingProgress == null) return child;
+                          return _buildPlaceholderImage();
+                        },
+                      )
+                    : _buildPlaceholderImage(),
+              ),
+            ),
+            // FIXED: Text section with proper spacing and overflow handling
+            Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // FIXED: Title - 1 line max, bold, 13sp, ellipsis
+                  Text(
+                    book.title ?? 'Untitled',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.poppins(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 13,
+                      height: 1.3,
+                      color: Colors.grey.shade900,
+                    ),
+                  ),
+                  SizedBox(height: 6),
+                  // FIXED: Author - 1 line max, 11sp, ellipsis
+                  Text(
+                    book.author ?? 'Unknown',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.poppins(
+                      fontWeight: FontWeight.w500,
+                      fontSize: 11,
+                      height: 1.2,
+                      color: Colors.grey.shade700,
+                    ),
                   ),
                 ],
               ),
-              child: TextField(
-                controller: _searchController,
-                decoration: InputDecoration(
-                  hintText: 'Search by title or author...',
-                  hintStyle: GoogleFonts.poppins(
-                    color: const Color(0xFF9CA3AF),
-                    fontSize: 15,
-                  ),
-                  prefixIcon: const Icon(
-                    Icons.search_rounded,
-                    color: Color(0xFF8E2DE2),
-                    size: 24,
-                  ),
-                  suffixIcon: _searchQuery.isNotEmpty
-                      ? IconButton(
-                          icon: const Icon(Icons.clear, color: Color(0xFF9CA3AF)),
-                          onPressed: _clearSearch,
-                        )
-                      : null,
-                  filled: true,
-                  fillColor: Colors.white,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(18),
-                    borderSide: const BorderSide(
-                      color: Color(0xFF8E2DE2),
-                      width: 2,
-                    ),
-                  ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(18),
-                    borderSide: const BorderSide(
-                      color: Color(0xFFE5E7EB),
-                      width: 1.5,
-                    ),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(18),
-                    borderSide: const BorderSide(
-                      color: Color(0xFF8E2DE2),
-                      width: 2.5,
-                    ),
-                  ),
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 20,
-                    vertical: 16,
-                  ),
-                ),
-                style: GoogleFonts.poppins(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
             ),
-          ),
-          // Scrollable grid with refresh
-          Expanded(
-            child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-              stream: FirebaseFirestore.instance.collection('books').snapshots(),
-              builder: (context, snapshot) {
-                // Handle error state
-                if (snapshot.hasError) {
-                  return Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(20),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(
-                            Icons.error_outline,
-                            size: 64,
-                            color: Colors.red[300],
-                          ),
-                          const SizedBox(height: 16),
-                          Text(
-                            'Failed to load books',
-                            style: GoogleFonts.poppins(
-                              fontSize: 18,
-                              fontWeight: FontWeight.w600,
-                              color: const Color(0xFF111827),
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            'Please check your connection and try again',
-                            style: GoogleFonts.poppins(
-                              fontSize: 14,
-                              color: const Color(0xFF6B7280),
-                            ),
-                            textAlign: TextAlign.center,
-                          ),
-                          const SizedBox(height: 20),
-                          ElevatedButton.icon(
-                            onPressed: () {
-                              _refreshIndicatorKey.currentState?.show();
-                            },
-                            icon: const Icon(Icons.refresh),
-                            label: Text('Retry', style: GoogleFonts.poppins()),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFF8E2DE2),
-                              foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  );
-                }
-
-                // Loading state with shimmer
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return _ShimmerGrid();
-                }
-
-                final docs = snapshot.data?.docs ?? const [];
-
-                // Filter by search query (title OR author, case-insensitive)
-                final filteredDocs = _searchQuery.isEmpty
-                    ? docs
-                    : docs.where((doc) {
-                        final data = doc.data();
-                        final title = (data['title']?.toString() ?? '').toLowerCase();
-                        final author = (data['author']?.toString() ?? '').toLowerCase();
-                        return title.contains(_searchQuery) || author.contains(_searchQuery);
-                      }).toList();
-
-                if (filteredDocs.isEmpty) {
-                  return Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(20),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(
-                            _searchQuery.isEmpty
-                                ? Icons.menu_book_outlined
-                                : Icons.search_off,
-                            size: 64,
-                            color: Colors.grey[400],
-                          ),
-                          const SizedBox(height: 16),
-                          Text(
-                            _searchQuery.isEmpty
-                                ? 'No books available'
-                                : 'No books found',
-                            style: GoogleFonts.poppins(
-                              fontSize: 18,
-                              fontWeight: FontWeight.w600,
-                              color: const Color(0xFF111827),
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            _searchQuery.isEmpty
-                                ? 'Check back later for new books to swap!'
-                                : 'Try searching with different keywords',
-                            style: GoogleFonts.poppins(
-                              fontSize: 14,
-                              color: const Color(0xFF6B7280),
-                            ),
-                            textAlign: TextAlign.center,
-                          ),
-                        ],
-                      ),
-                    ),
-                  );
-                }
-
-                return RefreshIndicator(
-                  key: _refreshIndicatorKey,
-                  onRefresh: _handleRefresh,
-                  color: const Color(0xFF8E2DE2),
-                  child: CustomScrollView(
-                    physics: const AlwaysScrollableScrollPhysics(),
-                    slivers: [
-                      // Item count indicator
-                      SliverToBoxAdapter(
-                        child: Padding(
-                          padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
-                          child: Align(
-                            alignment: Alignment.centerLeft,
-                            child: Text(
-                              'Showing ${filteredDocs.length} ${filteredDocs.length == 1 ? 'book' : 'books'}',
-                              style: GoogleFonts.poppins(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w500,
-                                color: const Color(0xFF6B7280),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                      // Books grid
-                      SliverPadding(
-                        padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
-                        sliver: SliverGrid(
-                          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                            crossAxisCount: 2,
-                            crossAxisSpacing: 16,
-                            mainAxisSpacing: 16,
-                            childAspectRatio: 0.65,
-                          ),
-                          delegate: SliverChildBuilderDelegate(
-                            (context, index) {
-                              final doc = filteredDocs[index];
-                              final data = doc.data();
-                              final bookId = doc.id;
-                              final title = data['title']?.toString() ?? '';
-                              final author = data['author']?.toString() ?? '';
-                              final imageURL = data['imageURL']?.toString() ?? '';
-                              final ownerId = data['ownerId']?.toString() ?? '';
-                              return TweenAnimationBuilder<double>(
-                                tween: Tween(begin: 0.0, end: 1.0),
-                                duration: Duration(milliseconds: 300 + (index * 50)),
-                                curve: Curves.easeOut,
-                                builder: (context, value, child) {
-                                  return Opacity(
-                                    opacity: value,
-                                    child: Transform.scale(
-                                      scale: 0.8 + (0.2 * value),
-                                      child: _BookCard(
-                                        title: title,
-                                        author: author,
-                                        coverUrl: imageURL.isNotEmpty
-                                            ? imageURL
-                                            : 'https://via.placeholder.com/600x800',
-                                        heroTag: 'book_$bookId',
-                                        bookId: bookId,
-                                        bookTitle: title,
-                                        ownerId: ownerId,
-                                        onTap: () => debugPrint('Tapped: $title'),
-                                        onSwap: () => _navigateToChat(context, bookId, title, ownerId),
-                                      ),
-                                    ),
-                                  );
-                                },
-                              );
-                            },
-                            childCount: filteredDocs.length,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                );
-              },
-            ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
-}
 
-// Shimmer loading effect
-class _ShimmerGrid extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return GridView.builder(
-      padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 2,
-        crossAxisSpacing: 16,
-        mainAxisSpacing: 16,
-        childAspectRatio: 0.65,
-      ),
-      itemCount: 6,
-      itemBuilder: (context, index) {
-        return _ShimmerCard();
-      },
-    );
-  }
-}
-
-class _ShimmerCard extends StatefulWidget {
-  @override
-  State<_ShimmerCard> createState() => _ShimmerCardState();
-}
-
-class _ShimmerCardState extends State<_ShimmerCard> with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1500),
-    )..repeat();
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: _controller,
-      builder: (context, child) {
-        return Container(
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(20),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.05),
-                blurRadius: 8,
-                offset: const Offset(0, 2),
-              ),
-            ],
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Expanded(
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: Colors.grey[300],
-                    borderRadius: const BorderRadius.only(
-                      topLeft: Radius.circular(20),
-                      topRight: Radius.circular(20),
-                    ),
-                  ),
-                  child: Stack(
-                    children: [
-                      Positioned.fill(
-                        child: Container(
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              begin: Alignment(-1.0 - _controller.value * 2, 0.0),
-                              end: Alignment(1.0 - _controller.value * 2, 0.0),
-                              colors: [
-                                Colors.grey[300]!,
-                                Colors.grey[100]!,
-                                Colors.grey[300]!,
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.all(14),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Container(
-                      height: 16,
-                      width: double.infinity,
-                      decoration: BoxDecoration(
-                        color: Colors.grey[300],
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Stack(
-                        children: [
-                          Positioned.fill(
-                            child: Container(
-                              decoration: BoxDecoration(
-                                gradient: LinearGradient(
-                                  begin: Alignment(-1.0 - _controller.value * 2, 0.0),
-                                  end: Alignment(1.0 - _controller.value * 2, 0.0),
-                                  colors: [
-                                    Colors.grey[300]!,
-                                    Colors.grey[100]!,
-                                    Colors.grey[300]!,
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Container(
-                      height: 12,
-                      width: 100,
-                      decoration: BoxDecoration(
-                        color: Colors.grey[300],
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: Stack(
-                        children: [
-                          Positioned.fill(
-                            child: Container(
-                              decoration: BoxDecoration(
-                                gradient: LinearGradient(
-                                  begin: Alignment(-1.0 - _controller.value * 2, 0.0),
-                                  end: Alignment(1.0 - _controller.value * 2, 0.0),
-                                  colors: [
-                                    Colors.grey[300]!,
-                                    Colors.grey[100]!,
-                                    Colors.grey[300]!,
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    Container(
-                      height: 40,
-                      width: double.infinity,
-                      decoration: BoxDecoration(
-                        color: Colors.grey[300],
-                        borderRadius: BorderRadius.circular(30),
-                      ),
-                      child: Stack(
-                        children: [
-                          Positioned.fill(
-                            child: Container(
-                              decoration: BoxDecoration(
-                                gradient: LinearGradient(
-                                  begin: Alignment(-1.0 - _controller.value * 2, 0.0),
-                                  end: Alignment(1.0 - _controller.value * 2, 0.0),
-                                  colors: [
-                                    Colors.grey[300]!,
-                                    Colors.grey[100]!,
-                                    Colors.grey[300]!,
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-}
-
-class _BookCard extends StatelessWidget {
-  final String title;
-  final String author;
-  final String coverUrl;
-  final String heroTag;
-  final String bookId;
-  final String bookTitle;
-  final String ownerId;
-  final VoidCallback onTap;
-  final VoidCallback onSwap;
-
-  const _BookCard({
-    required this.title,
-    required this.author,
-    required this.coverUrl,
-    required this.heroTag,
-    required this.bookId,
-    required this.bookTitle,
-    required this.ownerId,
-    required this.onTap,
-    required this.onSwap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      elevation: 0,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(20),
-        child: Ink(
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(20),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.1),
-                blurRadius: 16,
-                offset: const Offset(0, 6),
-                spreadRadius: 0,
-              ),
-              BoxShadow(
-                color: Colors.black.withOpacity(0.05),
-                blurRadius: 8,
-                offset: const Offset(0, 2),
-                spreadRadius: 0,
-              ),
-            ],
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Expanded(
-                child: Hero(
-                  tag: heroTag,
-                  child: ClipRRect(
-                    borderRadius: const BorderRadius.only(
-                      topLeft: Radius.circular(20),
-                      topRight: Radius.circular(20),
-                    ),
-                    child: Stack(
-                      fit: StackFit.expand,
-                      children: [
-                        Image.network(
-                          coverUrl,
-                          fit: BoxFit.cover,
-                          errorBuilder: (c, e, s) => Container(
-                            color: const Color(0xFFF3F4F6),
-                            child: const Icon(
-                              Icons.menu_book_rounded,
-                              size: 56,
-                              color: Color(0xFF9CA3AF),
-                            ),
-                          ),
-                          loadingBuilder: (context, child, loadingProgress) {
-                            if (loadingProgress == null) return child;
-                            return Container(
-                              color: const Color(0xFFF3F4F6),
-                              child: Center(
-                                child: CircularProgressIndicator(
-                                  value: loadingProgress.expectedTotalBytes != null
-                                      ? loadingProgress.cumulativeBytesLoaded /
-                                          loadingProgress.expectedTotalBytes!
-                                      : null,
-                                  strokeWidth: 2,
-                                  valueColor: const AlwaysStoppedAnimation<Color>(
-                                    Color(0xFF8E2DE2),
-                                  ),
-                                ),
-                              ),
-                            );
-                          },
-                        ),
-                        // Subtle gradient overlay on image
-                        const DecoratedBox(
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              begin: Alignment.topCenter,
-                              end: Alignment.bottomCenter,
-                              colors: [
-                                Colors.transparent,
-                                Color(0x1A000000),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(14, 14, 14, 12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: GoogleFonts.poppins(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w700,
-                        color: const Color(0xFF111827),
-                        height: 1.3,
-                        shadows: const [
-                          Shadow(
-                            color: Color(0x0A000000),
-                            offset: Offset(0, 1),
-                            blurRadius: 2,
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      author,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: GoogleFonts.poppins(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                        color: const Color(0xFF6B7280),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    SizedBox(
-                      height: 40,
-                      width: double.infinity,
-                      child: ElevatedButton(
-                        onPressed: onSwap,
-                        style: ElevatedButton.styleFrom(
-                          padding: EdgeInsets.zero,
-                          elevation: 4,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(30),
-                          ),
-                        ),
-                        child: Ink(
-                          decoration: const BoxDecoration(
-                            gradient: LinearGradient(
-                              colors: [Color(0xFF8E2DE2), Color(0xFF4A00E0)],
-                              begin: Alignment.centerLeft,
-                              end: Alignment.centerRight,
-                            ),
-                            borderRadius: BorderRadius.all(Radius.circular(30)),
-                          ),
-                          child: Center(
-                            child: Text(
-                              'Swap',
-                              style: GoogleFonts.poppins(
-                                color: Colors.white,
-                                fontSize: 14,
-                                fontWeight: FontWeight.w700,
-                                letterSpacing: 0.5,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
+  // FIXED: Placeholder image with proper sizing and aspect ratio
+  Widget _buildPlaceholderImage() {
+    return Container(
+      width: double.infinity,
+      height: double.infinity,
+      color: Colors.grey.shade200,
+      child: Center(
+        child: Icon(
+          Icons.menu_book_rounded,
+          size: 48,
+          color: Colors.grey.shade400,
         ),
       ),
     );

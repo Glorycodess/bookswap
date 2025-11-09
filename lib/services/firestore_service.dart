@@ -10,12 +10,13 @@ class FirestoreService {
 
   String? get currentUserId => _auth.currentUser?.uid;
 
-  // ========== BOOK OPERATIONS ==========
+  // ================= BOOK OPERATIONS =================
 
   // Create a new book listing
   Future<String> createBook(BookModel book) async {
     try {
-      DocumentReference docRef = await _firestore.collection('books').add(book.toMap());
+      DocumentReference docRef =
+          await _firestore.collection('books').add(book.toMap());
       return docRef.id;
     } catch (e) {
       print('Create book error: $e');
@@ -29,7 +30,6 @@ class FirestoreService {
         .collection('books')
         .where('status', isEqualTo: 'available')
         .where('ownerId', isNotEqualTo: currentUserId)
-        .orderBy('ownerId')
         .orderBy('createdAt', descending: true)
         .snapshots()
         .map((snapshot) => snapshot.docs
@@ -52,7 +52,8 @@ class FirestoreService {
   // Get a single book by ID
   Future<BookModel?> getBook(String bookId) async {
     try {
-      DocumentSnapshot doc = await _firestore.collection('books').doc(bookId).get();
+      DocumentSnapshot doc =
+          await _firestore.collection('books').doc(bookId).get();
       if (doc.exists) {
         return BookModel.fromMap(doc.data() as Map<String, dynamic>, doc.id);
       }
@@ -83,15 +84,13 @@ class FirestoreService {
     }
   }
 
-  // ========== SWAP OPERATIONS ==========
+  // ================= SWAP OPERATIONS =================
 
   // Create a swap request
   Future<String> createSwapRequest(SwapRequestModel swapRequest) async {
     try {
-      // Create swap request document
-      DocumentReference docRef = await _firestore
-          .collection('swap_requests')
-          .add(swapRequest.toMap());
+      DocumentReference docRef =
+          await _firestore.collection('swap_requests').add(swapRequest.toMap());
 
       // Update both books' status to pending_swap
       await updateBook(swapRequest.requesterBookId, {'status': 'pending_swap'});
@@ -130,15 +129,14 @@ class FirestoreService {
   }
 
   // Accept a swap request
-  Future<void> acceptSwapRequest(String swapId, String requesterBookId, String recipientBookId) async {
+  Future<void> acceptSwapRequest(
+      String swapId, String requesterBookId, String recipientBookId) async {
     try {
-      // Update swap request status
       await _firestore.collection('swap_requests').doc(swapId).update({
         'status': 'accepted',
         'updatedAt': DateTime.now().toIso8601String(),
       });
 
-      // Update both books' status to swapped
       await updateBook(requesterBookId, {'status': 'swapped'});
       await updateBook(recipientBookId, {'status': 'swapped'});
     } catch (e) {
@@ -147,16 +145,15 @@ class FirestoreService {
     }
   }
 
-  // Reject/Cancel a swap request
-  Future<void> rejectSwapRequest(String swapId, String requesterBookId, String recipientBookId) async {
+  // Reject a swap request
+  Future<void> rejectSwapRequest(
+      String swapId, String requesterBookId, String recipientBookId) async {
     try {
-      // Update swap request status
       await _firestore.collection('swap_requests').doc(swapId).update({
         'status': 'rejected',
         'updatedAt': DateTime.now().toIso8601String(),
       });
 
-      // Update both books' status back to available
       await updateBook(requesterBookId, {'status': 'available'});
       await updateBook(recipientBookId, {'status': 'available'});
     } catch (e) {
@@ -165,7 +162,7 @@ class FirestoreService {
     }
   }
 
-  // Update swap request (ADD THIS METHOD)
+  // Update a swap request
   Future<void> updateSwapRequest(String swapId, Map<String, dynamic> updates) async {
     try {
       await _firestore.collection('swap_requests').doc(swapId).update(updates);
@@ -175,7 +172,7 @@ class FirestoreService {
     }
   }
 
-  // ========== CHAT OPERATIONS ==========
+  // ================= CHAT OPERATIONS =================
 
   // Create a new chat
   Future<String> createChat({
@@ -186,7 +183,7 @@ class FirestoreService {
   }) async {
     try {
       String currentUserName = _auth.currentUser?.displayName ?? 'User';
-      
+
       DocumentReference docRef = await _firestore.collection('chats').add({
         'participants': [currentUserId, otherUserId],
         'participantNames': {
@@ -227,7 +224,6 @@ class FirestoreService {
     required String recipientId,
   }) async {
     try {
-      // Add message to messages subcollection
       await _firestore
           .collection('chats')
           .doc(chatId)
@@ -240,7 +236,6 @@ class FirestoreService {
             read: false,
           ).toMap());
 
-      // Update chat document
       await _firestore.collection('chats').doc(chatId).update({
         'lastMessage': text,
         'lastMessageTime': DateTime.now().toIso8601String(),
@@ -260,9 +255,8 @@ class FirestoreService {
         .collection('messages')
         .orderBy('timestamp', descending: false)
         .snapshots()
-        .map((snapshot) => snapshot.docs
-            .map((doc) => ChatMessageModel.fromMap(doc.data(), doc.id))
-            .toList());
+        .map((snapshot) =>
+            snapshot.docs.map((doc) => ChatMessageModel.fromMap(doc.data(), doc.id)).toList());
   }
 
   // Mark messages as read
