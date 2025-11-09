@@ -28,16 +28,6 @@ class _SignupScreenState extends State<SignupScreen> {
     super.dispose();
   }
 
-  Route _slideTo(Widget page) => PageRouteBuilder(
-        pageBuilder: (_, __, ___) => page,
-        transitionsBuilder: (_, animation, __, child) {
-          final offset = Tween(begin: const Offset(1, 0), end: Offset.zero).animate(animation);
-          final fade = CurvedAnimation(parent: animation, curve: Curves.easeOut);
-          return SlideTransition(position: offset, child: FadeTransition(opacity: fade, child: child));
-        },
-        transitionDuration: const Duration(milliseconds: 300),
-      );
-
   InputDecoration _dec(String label, IconData icon) => InputDecoration(
         labelText: label,
         prefixIcon: Icon(icon),
@@ -64,111 +54,113 @@ class _SignupScreenState extends State<SignupScreen> {
     return Scaffold(
       backgroundColor: Colors.white,
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
-          child: Form(
-            key: _formKey,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                const SizedBox(height: 24),
-                Center(
-                  child: Text(
-                    'Create Account',
-                    style: GoogleFonts.poppins(fontSize: 28, fontWeight: FontWeight.w700),
-                  ),
-                ),
-                const SizedBox(height: 24),
-                TextFormField(
-                  controller: _nameController,
-                  decoration: _dec('Name', Icons.person_outline),
-                  validator: (v) => (v == null || v.trim().isEmpty) ? 'Name is required' : null,
-                ),
-                const SizedBox(height: 16),
-                TextFormField(
-                  controller: _emailController,
-                  decoration: _dec('Email', Icons.email_outlined),
-                  keyboardType: TextInputType.emailAddress,
-                  validator: (v) {
-                    if (v == null || v.trim().isEmpty) return 'Email is required';
-                    final ok = RegExp(r'^.+@.+\..+$').hasMatch(v.trim());
-                    if (!ok) return 'Enter a valid email';
-                    return null;
-                  },
-                ),
-                const SizedBox(height: 16),
-                TextFormField(
-                  controller: _passwordController,
-                  obscureText: _obscure1,
-                  decoration: _dec('Password', Icons.lock_outline).copyWith(
-                    suffixIcon: IconButton(
-                      icon: Icon(_obscure1 ? Icons.visibility : Icons.visibility_off),
-                      onPressed: () => setState(() => _obscure1 = !_obscure1),
-                    ),
-                  ),
-                  validator: (v) {
-                    if (v == null || v.isEmpty) return 'Password is required';
-                    if (v.length < 6) return 'At least 6 characters';
-                    return null;
-                  },
-                ),
-                const SizedBox(height: 16),
-                TextFormField(
-                  controller: _confirmController,
-                  obscureText: _obscure2,
-                  decoration: _dec('Confirm Password', Icons.lock_outline).copyWith(
-                    suffixIcon: IconButton(
-                      icon: Icon(_obscure2 ? Icons.visibility : Icons.visibility_off),
-                      onPressed: () => setState(() => _obscure2 = !_obscure2),
-                    ),
-                  ),
-                  validator: (v) {
-                    if (v == null || v.isEmpty) return 'Please confirm your password';
-                    if (v != _passwordController.text) return 'Passwords do not match';
-                    return null;
-                  },
-                ),
-                const SizedBox(height: 24),
-                SizedBox(
-                  height: 52,
-                  child: ElevatedButton(
-                    onPressed: _loading ? null : _signup,
-                    style: ElevatedButton.styleFrom(
-                      elevation: 6,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
-                      padding: EdgeInsets.zero,
-                    ),
-                    child: Ink(
-                      decoration: const BoxDecoration(
-                        gradient: LinearGradient(colors: [Color(0xFF4A00E0), Color(0xFF8E2DE2)]),
-                        borderRadius: BorderRadius.all(Radius.circular(30)),
-                      ),
-                      child: Center(
-                        child: _loading
-                            ? const SizedBox(
-                                height: 22,
-                                width: 22,
-                                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                              )
-                            : Text(
-                                'Sign Up',
-                                style: GoogleFonts.poppins(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700),
-                              ),
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                Center(
-                  child: GestureDetector(
-                    onTap: () => Navigator.of(context).pop(),
+        child: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(24),
+            child: Form(
+              key: _formKey,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Center(
                     child: Text(
-                      'Already have an account? Login',
-                      style: GoogleFonts.poppins(color: const Color(0xFF4A00E0), fontWeight: FontWeight.w600),
+                      'Create Account',
+                      style: GoogleFonts.poppins(fontSize: 28, fontWeight: FontWeight.w700),
                     ),
                   ),
-                ),
-              ],
+                  const SizedBox(height: 24),
+                  TextFormField(
+                    controller: _nameController,
+                    decoration: _dec('Name', Icons.person_outline),
+                    validator: (v) => (v == null || v.trim().isEmpty) ? 'Name is required' : null,
+                  ),
+                  const SizedBox(height: 16),
+                  TextFormField(
+                    controller: _emailController,
+                    decoration: _dec('Email', Icons.email_outlined),
+                    keyboardType: TextInputType.emailAddress,
+                    validator: (v) {
+                      if (v == null || v.trim().isEmpty) return 'Email is required';
+                      final ok = RegExp(r'^.+@.+\..+$').hasMatch(v.trim());
+                      if (!ok) return 'Enter a valid email';
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 16),
+                  TextFormField(
+                    controller: _passwordController,
+                    obscureText: _obscure1,
+                    decoration: _dec('Password', Icons.lock_outline).copyWith(
+                      suffixIcon: IconButton(
+                        icon: Icon(_obscure1 ? Icons.visibility : Icons.visibility_off),
+                        onPressed: () => setState(() => _obscure1 = !_obscure1),
+                      ),
+                    ),
+                    validator: (v) {
+                      if (v == null || v.isEmpty) return 'Password is required';
+                      if (v.length < 6) return 'At least 6 characters';
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 16),
+                  TextFormField(
+                    controller: _confirmController,
+                    obscureText: _obscure2,
+                    decoration: _dec('Confirm Password', Icons.lock_outline).copyWith(
+                      suffixIcon: IconButton(
+                        icon: Icon(_obscure2 ? Icons.visibility : Icons.visibility_off),
+                        onPressed: () => setState(() => _obscure2 = !_obscure2),
+                      ),
+                    ),
+                    validator: (v) {
+                      if (v == null || v.isEmpty) return 'Please confirm your password';
+                      if (v != _passwordController.text) return 'Passwords do not match';
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 24),
+                  SizedBox(
+                    height: 52,
+                    child: ElevatedButton(
+                      onPressed: _loading ? null : _signup,
+                      style: ElevatedButton.styleFrom(
+                        elevation: 6,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+                        padding: EdgeInsets.zero,
+                      ),
+                      child: Ink(
+                        decoration: const BoxDecoration(
+                          gradient: LinearGradient(colors: [Color(0xFF4A00E0), Color(0xFF8E2DE2)]),
+                          borderRadius: BorderRadius.all(Radius.circular(30)),
+                        ),
+                        child: Center(
+                          child: _loading
+                              ? const SizedBox(
+                                  height: 22,
+                                  width: 22,
+                                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                                )
+                              : Text(
+                                  'Sign Up',
+                                  style: GoogleFonts.poppins(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700),
+                                ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Center(
+                    child: GestureDetector(
+                      onTap: () => Navigator.of(context).pop(),
+                      child: Text(
+                        'Already have an account? Login',
+                        style: GoogleFonts.poppins(color: const Color(0xFF4A00E0), fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ),
