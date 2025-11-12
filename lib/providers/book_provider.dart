@@ -1,16 +1,19 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import '../services/firestore_service.dart';
-import '../services/storage_service.dart';
 import '../models/book_model.dart';
 
 class BookProvider extends ChangeNotifier {
   final FirestoreService _firestoreService = FirestoreService();
-  final StorageService _storageService = StorageService();
 
   List<BookModel> _browseBooks = [];
   List<BookModel> _myBooks = [];
   bool _isLoading = false;
   String? _errorMessage;
+
+  // Stream subscriptions
+  StreamSubscription<List<BookModel>>? _browseBooksSubscription;
+  StreamSubscription<List<BookModel>>? _myBooksSubscription;
 
   List<BookModel> get browseBooks => _browseBooks;
   List<BookModel> get myBooks => _myBooks;
@@ -19,37 +22,73 @@ class BookProvider extends ChangeNotifier {
 
   // ================= Browse Books =================
   void getBrowseListings() {
+    // Cancel existing subscription if any
+    _browseBooksSubscription?.cancel();
+
+    final currentUserId = _firestoreService.currentUserId ?? '';
+    print('BookProvider: Setting up browse listings stream for user: $currentUserId');
+
     _isLoading = true;
     notifyListeners();
 
-    _firestoreService.getBrowseListings().listen((books) {
-      _browseBooks = books;
-      _isLoading = false;
-      notifyListeners();
-    }, onError: (error) {
-      _errorMessage = error.toString();
-      _isLoading = false;
-      notifyListeners();
-    });
+    // Create new subscription and store it
+    _browseBooksSubscription = _firestoreService.getBrowseListings(currentUserId).listen(
+      (List<BookModel> books) {
+        print('BookProvider: Received ${books.length} books from stream');
+        
+        // Note: Books are already sorted by FirestoreService (newest first)
+        
+        // ✅ Mark user's own books
+        _browseBooks = books.map((book) {
+          return book.copyWith(
+            isMine: book.ownerId == currentUserId,
+          );
+        }).toList();
+
+        print('BookProvider: Updated browseBooks list with ${_browseBooks.length} books');
+        _isLoading = false;
+        _errorMessage = null; // Clear any previous errors
+        notifyListeners();
+      },
+      onError: (error) {
+        print('BookProvider: Error loading browse books: $error');
+        print('BookProvider: Error stack trace: ${StackTrace.current}');
+        _errorMessage = error.toString();
+        _isLoading = false;
+        _browseBooks = []; // Clear books on error
+        notifyListeners();
+      },
+      cancelOnError: false, // Keep stream alive even on error
+    );
   }
 
   // ================= My Books =================
   void getMyBooks() {
+    // Cancel existing subscription if any
+    _myBooksSubscription?.cancel();
+
     _isLoading = true;
     notifyListeners();
 
-    _firestoreService.getMyBooks().listen((books) {
-      _myBooks = books;
-      _isLoading = false;
-      notifyListeners();
-    }, onError: (error) {
-      _errorMessage = error.toString();
-      _isLoading = false;
-      notifyListeners();
-    });
+    final currentUserId = _firestoreService.currentUserId ?? '';
+
+    // Create new subscription and store it
+    _myBooksSubscription = _firestoreService.getMyBooks(currentUserId).listen(
+      (List<BookModel> books) {
+        _myBooks = books;
+        _isLoading = false;
+        notifyListeners();
+      },
+      onError: (error) {
+        print('Error loading my books: $error');
+        _errorMessage = error.toString();
+        _isLoading = false;
+        notifyListeners();
+      },
+    );
   }
 
-  // ================= Add a Simple Book (no image, no swap info) =================
+  // ================= Add Simple Book =================
   Future<bool> addSimpleBook({
     required String title,
     required String author,
@@ -67,14 +106,16 @@ class BookProvider extends ChangeNotifier {
         author: author,
         genre: '',
         condition: '',
-        description: '', // Swap info placeholder
-        imageUrl: '',
+        description: '',
+        imageBase64: '',
         status: 'available',
         createdAt: DateTime.now(),
         updatedAt: DateTime.now(),
       );
 
       await _firestoreService.createBook(book);
+
+      // Note: Stream will automatically update, no need to call getBrowseListings() again
 
       _isLoading = false;
       notifyListeners();
@@ -87,18 +128,17 @@ class BookProvider extends ChangeNotifier {
     }
   }
 
-  // ================= Full Create Book (with image & swap info) =================
+  // ================= Full Create Book =================
   Future<bool> createBook({
     required String title,
     required String author,
     required String genre,
     required String condition,
-    required String description, // "Swap For" info stored here
+    required String description,
     required String ownerName,
-    String? imagePath,
+    String? imageBase64,
   }) async {
     try {
-      // Check if user is authenticated
       final userId = _firestoreService.currentUserId;
       if (userId == null || userId.isEmpty) {
         _errorMessage = 'Please log in to add a book';
@@ -111,26 +151,6 @@ class BookProvider extends ChangeNotifier {
       _errorMessage = null;
       notifyListeners();
 
-      String imageUrl = '';
-      
-      // Handle image upload - check if it's a local file path or URL
-      if (imagePath != null && imagePath.isNotEmpty) {
-        // Check if it's a URL (starts with http) or a local file path
-        if (imagePath.startsWith('http://') || imagePath.startsWith('https://')) {
-          // It's already a URL from OpenLibrary
-          imageUrl = imagePath;
-        } else {
-          // It's a local file path - upload to Firebase Storage
-          try {
-            imageUrl = await _storageService.uploadBookImage(imagePath);
-          } catch (e) {
-            print('Image upload error: $e');
-            // Continue without image if upload fails
-            imageUrl = '';
-          }
-        }
-      }
-
       final book = BookModel(
         id: '',
         ownerId: userId,
@@ -139,14 +159,20 @@ class BookProvider extends ChangeNotifier {
         author: author,
         genre: genre,
         condition: condition,
-        description: description, // swap info
-        imageUrl: imageUrl,
+        description: description,
+        imageBase64: imageBase64 ?? '',
         status: 'available',
         createdAt: DateTime.now(),
         updatedAt: DateTime.now(),
       );
 
-      await _firestoreService.createBook(book);
+      print('BookProvider: Creating book with status: ${book.status}, title: ${book.title}');
+      final bookId = await _firestoreService.createBook(book);
+      print('BookProvider: Book created successfully with ID: $bookId');
+
+      // Note: Stream will automatically update when Firestore document is created
+      // The Firestore stream listener will receive the new book automatically
+      // No need to call getBrowseListings() again - it would create duplicate subscriptions
 
       _isLoading = false;
       _errorMessage = null;
@@ -169,34 +195,29 @@ class BookProvider extends ChangeNotifier {
     required String genre,
     required String condition,
     required String description,
-    String? newImagePath,
-    String? currentImageUrl,
+    String? imageBase64,
   }) async {
     try {
       _isLoading = true;
       _errorMessage = null;
       notifyListeners();
 
-      String imageUrl = currentImageUrl ?? '';
-
-      if (newImagePath != null && newImagePath.isNotEmpty) {
-        if (currentImageUrl != null && currentImageUrl.isNotEmpty) {
-          await _storageService.deleteImage(currentImageUrl);
-        }
-        imageUrl = await _storageService.uploadBookImage(newImagePath);
-      }
-
       final updates = {
         'title': title,
         'author': author,
         'genre': genre,
         'condition': condition,
-        'description': description, // update swap info
-        'imageUrl': imageUrl,
-        'updatedAt': DateTime.now(),
+        'description': description,
+        'updatedAt': DateTime.now().toIso8601String(),
       };
 
+      if (imageBase64 != null) {
+        updates['imageBase64'] = imageBase64;
+      }
+
       await _firestoreService.updateBook(bookId, updates);
+
+      // Note: Stream will automatically update, no need to call getBrowseListings() again
 
       _isLoading = false;
       notifyListeners();
@@ -210,17 +231,15 @@ class BookProvider extends ChangeNotifier {
   }
 
   // ================= Delete Book =================
-  Future<bool> deleteBook(String bookId, String? imageUrl) async {
+  Future<bool> deleteBook(String bookId) async {
     try {
       _isLoading = true;
       _errorMessage = null;
       notifyListeners();
 
-      if (imageUrl != null && imageUrl.isNotEmpty) {
-        await _storageService.deleteImage(imageUrl);
-      }
-
       await _firestoreService.deleteBook(bookId);
+
+      // Note: Stream will automatically update, no need to call getBrowseListings() again
 
       _isLoading = false;
       notifyListeners();
@@ -237,5 +256,13 @@ class BookProvider extends ChangeNotifier {
   void clearError() {
     _errorMessage = null;
     notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    // Cancel all stream subscriptions when provider is disposed
+    _browseBooksSubscription?.cancel();
+    _myBooksSubscription?.cancel();
+    super.dispose();
   }
 }

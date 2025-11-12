@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -5,6 +6,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../providers/book_provider.dart';
 import '../screens/add_book_page.dart';
+import '../screens/edit_book_page.dart';
 import '../models/book_model.dart';
 
 class ListingsTab extends StatefulWidget {
@@ -168,29 +170,12 @@ class _ListingsTabState extends State<ListingsTab> {
         contentPadding: const EdgeInsets.all(12),
         leading: ClipRRect(
           borderRadius: BorderRadius.circular(8),
-          child: book.imageUrl.isNotEmpty
-              ? Image.network(
-                  book.imageUrl,
+          child: book.imageBase64.isNotEmpty
+              ? Image.memory(
+                  base64Decode(book.imageBase64),
                   width: 60,
                   height: 90,
                   fit: BoxFit.cover,
-                  loadingBuilder: (context, child, loadingProgress) {
-                    if (loadingProgress == null) return child;
-                    return Container(
-                      width: 60,
-                      height: 90,
-                      color: Colors.grey.shade200,
-                      child: Center(
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          value: loadingProgress.expectedTotalBytes != null
-                              ? loadingProgress.cumulativeBytesLoaded /
-                                  loadingProgress.expectedTotalBytes!
-                              : null,
-                        ),
-                      ),
-                    );
-                  },
                   errorBuilder: (context, error, stackTrace) => Container(
                     width: 60,
                     height: 90,
@@ -269,11 +254,29 @@ class _ListingsTabState extends State<ListingsTab> {
         trailing: PopupMenuButton<String>(
           icon: Icon(Icons.more_vert, color: primaryColor),
           onSelected: (value) {
-            if (value == 'delete') {
+            if (value == 'edit') {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => EditBookPage(book: book)),
+              ).then((_) {
+                // Refresh books after edit
+                context.read<BookProvider>().getMyBooks();
+              });
+            } else if (value == 'delete') {
               _confirmDelete(context, book);
             }
           },
           itemBuilder: (context) => [
+            const PopupMenuItem(
+              value: 'edit',
+              child: Row(
+                children: [
+                  Icon(Icons.edit_outlined, size: 20, color: Colors.blue),
+                  SizedBox(width: 8),
+                  Text('Edit', style: TextStyle(color: Colors.blue)),
+                ],
+              ),
+            ),
             const PopupMenuItem(
               value: 'delete',
               child: Row(
@@ -289,6 +292,7 @@ class _ListingsTabState extends State<ListingsTab> {
       ),
     );
   }
+
 
   Future<void> _confirmDelete(BuildContext context, BookModel book) async {
     final confirm = await showDialog<bool>(
@@ -338,7 +342,7 @@ class _ListingsTabState extends State<ListingsTab> {
     );
 
     if (confirm == true && context.mounted) {
-      final success = await context.read<BookProvider>().deleteBook(book.id, book.imageUrl);
+      final success = await context.read<BookProvider>().deleteBook(book.id);
       if (success && context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(

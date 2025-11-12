@@ -83,31 +83,80 @@ class _ChatsTabState extends State<ChatsTab> {
                     return bTime.compareTo(aTime);
                   });
 
-                  if (docs.isEmpty) {
-                    return Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(Icons.chat_bubble_outline, size: 64, color: Colors.grey[400]),
-                          const SizedBox(height: 16),
-                          Text(
-                            'No chats yet',
-                            style: GoogleFonts.poppins(
-                              fontSize: 18,
-                              fontWeight: FontWeight.w600,
-                              color: Colors.grey[600],
-                            ),
+                  // Show demo chat if no chats exist
+                  final hasRealChats = docs.isNotEmpty;
+                  
+                  if (!hasRealChats) {
+                    // Show demo chat card
+                    return ListView(
+                      padding: const EdgeInsets.symmetric(horizontal: 20),
+                      children: [
+                        Card(
+                          margin: const EdgeInsets.only(bottom: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
                           ),
-                          const SizedBox(height: 8),
-                          Text(
-                            'Start a swap to begin chatting!',
-                            style: GoogleFonts.poppins(
-                              fontSize: 14,
-                              color: Colors.grey[500],
+                          elevation: 2,
+                          child: ListTile(
+                            contentPadding: const EdgeInsets.all(16),
+                            title: Text(
+                              'The Hunger Games',
+                              style: GoogleFonts.poppins(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w700,
+                                color: const Color(0xFF111827),
+                              ),
                             ),
+                            subtitle: Text(
+                              'Hey! Just finished The Hunger Games...',
+                              style: GoogleFonts.poppins(
+                                fontSize: 13,
+                                color: Colors.grey[600],
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            trailing: Icon(Icons.chevron_right, color: _purple),
+                            onTap: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => ChatScreen(
+                                    swapId: 'demo-swap-123',
+                                    bookTitle: 'The Hunger Games',
+                                    bookId: 'demo-book-123',
+                                  ),
+                                ),
+                              );
+                            },
                           ),
-                        ],
-                      ),
+                        ),
+                        const SizedBox(height: 20),
+                        Center(
+                          child: Column(
+                            children: [
+                              Icon(Icons.chat_bubble_outline, size: 48, color: Colors.grey[400]),
+                              const SizedBox(height: 12),
+                              Text(
+                                'No other chats yet',
+                                style: GoogleFonts.poppins(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.grey[600],
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                'Start a swap to begin chatting!',
+                                style: GoogleFonts.poppins(
+                                  fontSize: 13,
+                                  color: Colors.grey[500],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                     );
                   }
 

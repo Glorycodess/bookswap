@@ -24,21 +24,55 @@ class FirestoreService {
     }
   }
 
-  // Get all available books (excluding current user's books)
-  Stream<List<BookModel>> getBrowseListings() {
-    return _firestore
-        .collection('books')
-        .where('status', isEqualTo: 'available')
-        .where('ownerId', isNotEqualTo: currentUserId)
-        .orderBy('createdAt', descending: true)
-        .snapshots()
-        .map((snapshot) => snapshot.docs
-            .map((doc) => BookModel.fromMap(doc.data(), doc.id))
-            .toList());
+  // Get all available books, including current user's books
+  Stream<List<BookModel>> getBrowseListings(String currentUserId) {
+    // ✅ Fetch all available books
+    // Note: We filter by status only, sorting is done in Dart to avoid index requirement
+    try {
+      return _firestore
+          .collection('books')
+          .where('status', isEqualTo: 'available')
+          .snapshots()
+          .map((snapshot) {
+            try {
+              if (snapshot.docs.isEmpty) {
+                return <BookModel>[];
+              }
+              final books = snapshot.docs
+                  .map((doc) {
+                    try {
+                      final data = doc.data();
+                      if (data.isEmpty) return null;
+                      return BookModel.fromMap(data, doc.id);
+                    } catch (e) {
+                      print('Error parsing book document ${doc.id}: $e');
+                      return null;
+                    }
+                  })
+                  .whereType<BookModel>()
+                  .toList();
+              
+              // Sort by createdAt descending (newest first)
+              books.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+              
+              return books;
+            } catch (e) {
+              print('Error processing books snapshot: $e');
+              return <BookModel>[];
+            }
+          })
+          .handleError((error) {
+            print('Error in getBrowseListings stream: $error');
+            return <BookModel>[];
+          });
+    } catch (e) {
+      print('Error creating getBrowseListings stream: $e');
+      return Stream.value(<BookModel>[]);
+    }
   }
 
   // Get current user's books
-  Stream<List<BookModel>> getMyBooks() {
+  Stream<List<BookModel>> getMyBooks(String currentUserId) {
     return _firestore
         .collection('books')
         .where('ownerId', isEqualTo: currentUserId)
@@ -85,16 +119,14 @@ class FirestoreService {
   }
 
   // ================= SWAP OPERATIONS =================
-
-  // Create a swap request
   Future<String> createSwapRequest(SwapRequestModel swapRequest) async {
     try {
       DocumentReference docRef =
           await _firestore.collection('swap_requests').add(swapRequest.toMap());
 
-      // Update both books' status to pending_swap
-      await updateBook(swapRequest.requesterBookId, {'status': 'pending_swap'});
-      await updateBook(swapRequest.recipientBookId, {'status': 'pending_swap'});
+      // Update both books' status to pending
+      await updateBook(swapRequest.requesterBookId, {'status': 'pending'});
+      await updateBook(swapRequest.recipientBookId, {'status': 'pending'});
 
       return docRef.id;
     } catch (e) {
@@ -103,11 +135,13 @@ class FirestoreService {
     }
   }
 
-  // Get swap requests where current user is recipient
   Stream<List<SwapRequestModel>> getReceivedSwapRequests() {
+    final currentUser = currentUserId;
+    if (currentUser == null) return const Stream.empty();
+
     return _firestore
         .collection('swap_requests')
-        .where('recipientId', isEqualTo: currentUserId)
+        .where('recipientId', isEqualTo: currentUser)
         .where('status', isEqualTo: 'pending')
         .orderBy('createdAt', descending: true)
         .snapshots()
@@ -116,11 +150,13 @@ class FirestoreService {
             .toList());
   }
 
-  // Get swap requests where current user is requester
   Stream<List<SwapRequestModel>> getSentSwapRequests() {
+    final currentUser = currentUserId;
+    if (currentUser == null) return const Stream.empty();
+
     return _firestore
         .collection('swap_requests')
-        .where('requesterId', isEqualTo: currentUserId)
+        .where('requesterId', isEqualTo: currentUser)
         .orderBy('createdAt', descending: true)
         .snapshots()
         .map((snapshot) => snapshot.docs
@@ -128,7 +164,6 @@ class FirestoreService {
             .toList());
   }
 
-  // Accept a swap request
   Future<void> acceptSwapRequest(
       String swapId, String requesterBookId, String recipientBookId) async {
     try {
@@ -145,7 +180,6 @@ class FirestoreService {
     }
   }
 
-  // Reject a swap request
   Future<void> rejectSwapRequest(
       String swapId, String requesterBookId, String recipientBookId) async {
     try {
@@ -162,7 +196,6 @@ class FirestoreService {
     }
   }
 
-  // Update a swap request
   Future<void> updateSwapRequest(String swapId, Map<String, dynamic> updates) async {
     try {
       await _firestore.collection('swap_requests').doc(swapId).update(updates);
@@ -173,8 +206,6 @@ class FirestoreService {
   }
 
   // ================= CHAT OPERATIONS =================
-
-  // Create a new chat
   Future<String> createChat({
     required String otherUserId,
     required String otherUserName,
@@ -207,17 +238,18 @@ class FirestoreService {
     }
   }
 
-  // Get user's chats
   Stream<List<QueryDocumentSnapshot>> getUserChats() {
+    final currentUser = currentUserId;
+    if (currentUser == null) return const Stream.empty();
+
     return _firestore
         .collection('chats')
-        .where('participants', arrayContains: currentUserId)
+        .where('participants', arrayContains: currentUser)
         .orderBy('lastMessageTime', descending: true)
         .snapshots()
         .map((snapshot) => snapshot.docs);
   }
 
-  // Send a message
   Future<void> sendMessage({
     required String chatId,
     required String text,
@@ -247,7 +279,6 @@ class FirestoreService {
     }
   }
 
-  // Get messages for a chat
   Stream<List<ChatMessageModel>> getChatMessages(String chatId) {
     return _firestore
         .collection('chats')
@@ -259,7 +290,6 @@ class FirestoreService {
             snapshot.docs.map((doc) => ChatMessageModel.fromMap(doc.data(), doc.id)).toList());
   }
 
-  // Mark messages as read
   Future<void> markMessagesAsRead(String chatId) async {
     try {
       await _firestore.collection('chats').doc(chatId).update({

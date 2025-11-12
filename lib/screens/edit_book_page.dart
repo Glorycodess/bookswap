@@ -1,65 +1,60 @@
 import 'dart:io';
 import 'dart:convert';
-import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
-import 'package:http/http.dart' as http;
 import 'package:google_fonts/google_fonts.dart';
 import '../providers/book_provider.dart';
-import '../providers/auth_provider.dart';
+import '../models/book_model.dart';
 
-class AddBookPage extends StatefulWidget {
-  const AddBookPage({super.key});
+class EditBookPage extends StatefulWidget {
+  final BookModel book;
+
+  const EditBookPage({super.key, required this.book});
 
   @override
-  State<AddBookPage> createState() => _AddBookPageState();
+  State<EditBookPage> createState() => _EditBookPageState();
 }
 
-class _AddBookPageState extends State<AddBookPage> {
+class _EditBookPageState extends State<EditBookPage> {
   final _formKey = GlobalKey<FormState>();
   final TextEditingController _titleController = TextEditingController();
   final TextEditingController _authorController = TextEditingController();
-  final TextEditingController _lookingForController = TextEditingController();
+  final TextEditingController _descriptionController = TextEditingController();
 
   String _condition = 'New';
   File? _selectedImage;
+  String? _currentBase64Image;
   bool _isSubmitting = false;
 
   final ImagePicker _picker = ImagePicker();
+
+  @override
+  void initState() {
+    super.initState();
+    _titleController.text = widget.book.title;
+    _authorController.text = widget.book.author;
+    _descriptionController.text = widget.book.description;
+    _condition = widget.book.condition;
+    _currentBase64Image = widget.book.imageBase64;
+  }
+
+  @override
+  void dispose() {
+    _titleController.dispose();
+    _authorController.dispose();
+    _descriptionController.dispose();
+    super.dispose();
+  }
 
   Future<void> _pickImage() async {
     final XFile? image = await _picker.pickImage(source: ImageSource.gallery);
     if (image != null) {
       setState(() {
         _selectedImage = File(image.path);
+        _currentBase64Image = null; // Clear base64 when new image is selected
       });
     }
-  }
-
-  Future<String?> _fetchCoverAsBase64(String title, String author) async {
-    final query = Uri.encodeComponent('$title $author');
-    final url = 'https://openlibrary.org/search.json?q=$query';
-    try {
-      final response = await http.get(Uri.parse(url));
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        if (data['docs'] != null && data['docs'].isNotEmpty) {
-          final coverId = data['docs'][0]['cover_i'];
-          if (coverId != null) {
-            final imageUrl = 'https://covers.openlibrary.org/b/id/$coverId-L.jpg';
-            final imageResponse = await http.get(Uri.parse(imageUrl));
-            if (imageResponse.statusCode == 200) {
-              final Uint8List imageBytes = imageResponse.bodyBytes;
-              return base64Encode(imageBytes);
-            }
-          }
-        }
-      }
-    } catch (e) {
-      print('Error fetching cover image: $e');
-    }
-    return null;
   }
 
   String? _convertFileToBase64(File file) {
@@ -75,10 +70,9 @@ class _AddBookPageState extends State<AddBookPage> {
   void _submit() async {
     if (!_formKey.currentState!.validate()) return;
 
-    // Validate required fields
     final title = _titleController.text.trim();
     final author = _authorController.text.trim();
-    
+
     if (title.isEmpty || author.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -94,25 +88,21 @@ class _AddBookPageState extends State<AddBookPage> {
 
     String? imageBase64;
 
-    // First try to get image from selection
+    // If new image selected, convert it
     if (_selectedImage != null) {
       imageBase64 = _convertFileToBase64(_selectedImage!);
-    } else {
-      // If no image selected, try to fetch from OpenLibrary
-      imageBase64 = await _fetchCoverAsBase64(title, author);
+    } else if (_currentBase64Image != null && _currentBase64Image!.isNotEmpty) {
+      // Keep existing image
+      imageBase64 = _currentBase64Image;
     }
 
-    // Get owner name from auth provider
-    final authProvider = context.read<AuthProvider>();
-    final ownerName = authProvider.currentUser?.name ?? 'Anonymous';
-
-    bool success = await context.read<BookProvider>().createBook(
+    bool success = await context.read<BookProvider>().updateBook(
+          bookId: widget.book.id,
           title: title,
           author: author,
-          genre: '',
+          genre: widget.book.genre,
           condition: _condition,
-          description: _lookingForController.text.trim(),
-          ownerName: ownerName,
+          description: _descriptionController.text.trim(),
           imageBase64: imageBase64,
         );
 
@@ -127,7 +117,7 @@ class _AddBookPageState extends State<AddBookPage> {
             children: [
               Icon(Icons.check_circle, color: Colors.white),
               SizedBox(width: 12),
-              Text('Book added successfully!'),
+              Text('Book updated successfully!'),
             ],
           ),
           backgroundColor: Colors.green.shade600,
@@ -135,27 +125,13 @@ class _AddBookPageState extends State<AddBookPage> {
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         ),
       );
-      
-      // Clear form
-      _titleController.clear();
-      _authorController.clear();
-      _lookingForController.clear();
-      setState(() {
-        _condition = 'New';
-        _selectedImage = null;
-      });
-      
-      // Navigate back after a short delay
-      Future.delayed(const Duration(milliseconds: 500), () {
-        if (mounted) {
-          Navigator.pop(context, true);
-        }
-      });
+
+      Navigator.pop(context, true);
     } else {
       final error = context.read<BookProvider>().errorMessage ?? 'Unknown error';
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Failed to add book: $error'),
+          content: Text('Failed to update book: $error'),
           backgroundColor: Colors.red.shade600,
           behavior: SnackBarBehavior.floating,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -165,18 +141,60 @@ class _AddBookPageState extends State<AddBookPage> {
     }
   }
 
+  Widget _buildImagePreview() {
+    if (_selectedImage != null) {
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(18),
+        child: Image.file(_selectedImage!, fit: BoxFit.cover),
+      );
+    } else if (_currentBase64Image != null && _currentBase64Image!.isNotEmpty) {
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(18),
+        child: Image.memory(
+          base64Decode(_currentBase64Image!),
+          fit: BoxFit.cover,
+        ),
+      );
+    } else {
+      return Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.add_photo_alternate_rounded,
+              size: 64, color: Colors.purple.shade900.withOpacity(0.5)),
+          SizedBox(height: 12),
+          Text(
+            'Add Cover Image',
+            style: GoogleFonts.poppins(
+              color: Colors.purple.shade900,
+              fontWeight: FontWeight.w600,
+              fontSize: 14,
+            ),
+          ),
+          SizedBox(height: 4),
+          Text(
+            'Tap to select',
+            style: GoogleFonts.poppins(
+              color: Colors.grey.shade500,
+              fontSize: 12,
+            ),
+          ),
+        ],
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    final primaryColor = Color(0xFF6C5CE7);
-    final accentColor = Color(0xFF00B894);
+    final primaryColor = Colors.purple.shade900; // purple900
 
     return Scaffold(
-      backgroundColor: Colors.grey.shade50,
+      backgroundColor: Colors.white,
       appBar: AppBar(
-        title: Text('Add New Book', style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
+        title: Text('Edit Book', style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
         backgroundColor: primaryColor,
         elevation: 0,
         foregroundColor: Colors.white,
+        iconTheme: IconThemeData(color: Colors.white),
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(24),
@@ -204,60 +222,17 @@ class _AddBookPageState extends State<AddBookPage> {
                         ),
                       ],
                     ),
-                    child: _selectedImage != null
-                        ? ClipRRect(
-                            borderRadius: BorderRadius.circular(18),
-                            child: Image.file(_selectedImage!, fit: BoxFit.cover),
-                          )
-                        : Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(Icons.add_photo_alternate_rounded, 
-                                size: 64, 
-                                color: primaryColor.withOpacity(0.5)),
-                              SizedBox(height: 12),
-                              Text(
-                                'Add Cover Image',
-                                style: GoogleFonts.poppins(
-                                  color: primaryColor,
-                                  fontWeight: FontWeight.w600,
-                                  fontSize: 14,
-                                ),
-                              ),
-                              SizedBox(height: 4),
-                              Text(
-                                'Tap to select',
-                                style: GoogleFonts.poppins(
-                                  color: Colors.grey.shade500,
-                                  fontSize: 12,
-                                ),
-                              ),
-                            ],
-                          ),
+                    child: _buildImagePreview(),
                   ),
                 ),
               ),
-              if (_selectedImage == null)
-                Padding(
-                  padding: const EdgeInsets.only(top: 8),
-                  child: Center(
-                    child: Text(
-                      'Or we\'ll find one automatically',
-                      style: GoogleFonts.poppins(
-                        fontSize: 12,
-                        color: Colors.grey.shade600,
-                        fontStyle: FontStyle.italic,
-                      ),
-                    ),
-                  ),
-                ),
               SizedBox(height: 32),
 
               // Book Title
-              Text('Book Information', 
-                style: GoogleFonts.poppins(fontSize: 20, fontWeight: FontWeight.w700)),
+              Text('Book Information',
+                  style: GoogleFonts.poppins(fontSize: 20, fontWeight: FontWeight.w700)),
               SizedBox(height: 16),
-              
+
               _buildTextField(
                 controller: _titleController,
                 label: 'Book Title',
@@ -316,10 +291,10 @@ class _AddBookPageState extends State<AddBookPage> {
               ),
               SizedBox(height: 16),
 
-              // Looking For (better naming than "Swap For")
+              // Description
               _buildTextField(
-                controller: _lookingForController,
-                label: 'Looking For (Optional)',
+                controller: _descriptionController,
+                label: 'Description (Optional)',
                 hint: 'What books are you interested in?',
                 icon: Icons.search_rounded,
                 primaryColor: primaryColor,
@@ -335,13 +310,12 @@ class _AddBookPageState extends State<AddBookPage> {
                 child: ElevatedButton(
                   onPressed: _isSubmitting ? null : _submit,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: accentColor,
+                    backgroundColor: primaryColor,
                     foregroundColor: Colors.white,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(16),
                     ),
                     elevation: 0,
-                    shadowColor: accentColor.withOpacity(0.3),
                   ),
                   child: _isSubmitting
                       ? SizedBox(
@@ -358,7 +332,7 @@ class _AddBookPageState extends State<AddBookPage> {
                             Icon(Icons.check_circle_outline_rounded, size: 24),
                             SizedBox(width: 8),
                             Text(
-                              'Add Book',
+                              'Update Book',
                               style: GoogleFonts.poppins(
                                 fontSize: 16,
                                 fontWeight: FontWeight.w600,
@@ -421,3 +395,4 @@ class _AddBookPageState extends State<AddBookPage> {
     );
   }
 }
+

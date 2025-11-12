@@ -1,3 +1,5 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+
 class BookModel {
   final String id;
   final String ownerId;
@@ -7,10 +9,13 @@ class BookModel {
   final String genre;
   final String condition;
   final String description;
-  final String imageUrl;
-  final String status; // "available", "pending_swap", "swapped"
+  final String imageBase64;
+  final String status; // "available", "pending", "swapped"
   final DateTime createdAt;
   final DateTime updatedAt;
+
+  // ✅ New field to mark if the book belongs to the current user
+  bool isMine;
 
   BookModel({
     required this.id,
@@ -21,10 +26,11 @@ class BookModel {
     required this.genre,
     required this.condition,
     required this.description,
-    required this.imageUrl,
+    required this.imageBase64,
     required this.status,
     required this.createdAt,
     required this.updatedAt,
+    this.isMine = false, // default false
   });
 
   factory BookModel.fromMap(Map<String, dynamic> map, String id) {
@@ -37,10 +43,14 @@ class BookModel {
       genre: map['genre'] ?? '',
       condition: map['condition'] ?? '',
       description: map['description'] ?? '',
-      imageUrl: map['imageUrl'] ?? '',
+      imageBase64: map['imageBase64'] ?? '',
       status: map['status'] ?? 'available',
-      createdAt: DateTime.parse(map['createdAt']),
-      updatedAt: DateTime.parse(map['updatedAt']),
+      createdAt: map['createdAt'] is String
+          ? DateTime.parse(map['createdAt'])
+          : (map['createdAt'] as Timestamp).toDate(),
+      updatedAt: map['updatedAt'] is String
+          ? DateTime.parse(map['updatedAt'])
+          : (map['updatedAt'] as Timestamp).toDate(),
     );
   }
 
@@ -53,7 +63,7 @@ class BookModel {
       'genre': genre,
       'condition': condition,
       'description': description,
-      'imageUrl': imageUrl,
+      'imageBase64': imageBase64,
       'status': status,
       'createdAt': createdAt.toIso8601String(),
       'updatedAt': updatedAt.toIso8601String(),
@@ -61,22 +71,30 @@ class BookModel {
   }
 
   BookModel copyWith({
+    String? title,
+    String? author,
+    String? genre,
+    String? condition,
+    String? description,
+    String? imageBase64,
     String? status,
     DateTime? updatedAt,
+    bool? isMine, // ✅ support updating isMine
   }) {
     return BookModel(
       id: id,
       ownerId: ownerId,
       ownerName: ownerName,
-      title: title,
-      author: author,
-      genre: genre,
-      condition: condition,
-      description: description,
-      imageUrl: imageUrl,
+      title: title ?? this.title,
+      author: author ?? this.author,
+      genre: genre ?? this.genre,
+      condition: condition ?? this.condition,
+      description: description ?? this.description,
+      imageBase64: imageBase64 ?? this.imageBase64,
       status: status ?? this.status,
       createdAt: createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
+      isMine: isMine ?? this.isMine,
     );
   }
 }
